@@ -1,59 +1,81 @@
+import os
+import re
 import logging
-from telegram import Update, Sticker
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
-from telegram.constants import ParseMode
+import requests
+from bs4 import BeautifulSoup
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-# Define the /start command
-async def start(update: Update, context: CallbackContext) -> None:
-    # Send a sticker on start
-    await update.message.reply_sticker('CAACAgUAAxkBAAENzCVnsGoDRbVAg2EDLQzEFskMarYqjwACIRMAAudUOFQQ7nxQ8toG6DYE')  # replace with your sticker ID
-    # Wait for 1 second and delete the sticker
-    await update.message.delete()
-    # Send a message asking for files/photos/videos
-    await update.message.reply_text(
-        "Send me a file, photo, or video, and I will give you a link. 🎥📁📸\n\nI will provide a link to your uploaded file. Please wait for the process to finish!",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
+# Replace with your bot token
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Handle received files
-async def handle_file(update: Update, context: CallbackContext) -> None:
-    file = update.message.document or update.message.photo or update.message.video
-    if file:
-        file_id = file.file_id
-        file_name = file.file_name if hasattr(file, 'file_name') else "unknown_file"
+# List of Terabox domains
+TERABOX_DOMAINS = [
+    "mirrobox.com", "nephobox.com", "freeterabox.com", "1024tera.com",
+    "4funbox.co", "terabox.app", "terabox.com", "terabox.fun", "momerybox.com",
+    "tibibox.com", "teraboxapp.com", "www.mirrobox.com", "www.nephobox.com",
+    "www.freeterabox.com", "www.1024tera.com", "www.4funbox.com",
+    "www.terabox.com", "www.momerybox.com", "www.tibibox.com", "www.teraboxapp.com"
+]
 
-        # Upload file to a storage channel (simulate here by printing)
-        print(f"Uploading {file_name} with ID: {file_id} to storage...")
-
-        # Simulate generating a link for the uploaded file
-        file_link = f"https://t.me/teraboxfiledownloadeasybot?start={file_id}"
-
-        await update.message.reply_text(f"File uploaded successfully! You can download it here: {file_link}")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message.text
+    if any(domain in message for domain in TERABOX_DOMAINS):
+        try:
+            await update.message.reply_text("Processing your Terabox link...")
+            
+            # Get direct download URL
+            direct_url = await get_direct_url(message)
+            
+            if direct_url:
+                await update.message.reply_video(direct_url)
+            else:
+                await update.message.reply_text("Failed to process the link")
+                
+        except Exception as e:
+            logging.error(f"Error: {e}")
+            await update.message.reply_text("Error processing your request")
     else:
-        await update.message.reply_text("Please send a valid file, photo, or video!")
+        await update.message.reply_text("Please send a valid Terabox link")
 
-# Error handling
-def error(update: Update, context: CallbackContext) -> None:
-    logger.warning(f"Update {update} caused error {context.error}")
+async def get_direct_url(terabox_url: str) -> str:
+    """Extract direct download URL from Terabox link"""
+    try:
+        # Send a request to the Terabox link
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(terabox_url, headers=headers)
+        response.raise_for_status()
 
-async def main():
-    # Bot's token
-    token = '7938705422:AAH1MPF24jVPJ7rXH_FC3JMxC0sHTDOR7Gk'  # Replace with your actual bot token
-    application = Application.builder().token(token).build()
+        # Parse the HTML content
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Document.ALL | filters.Photo.ALL | filters.Video.ALL, handle_file))
-    application.add_error_handler(error)
+        # Find the direct download URL (this depends on Terabox's HTML structure)
+        # Example: Look for <video> or <a> tags with download links
+        video_tag = soup.find("video")
+        if video_tag and video_tag.get("src"):
+            return video_tag["src"]
 
-    # Start the Bot
-    await application.run_polling()
+        # If no video tag is found, look for other download links
+        download_link = soup.find("a", href=re.compile(r"https?://.*\.(mp4|mkv|avi)"))
+        if download_link and download_link.get("href"):
+            return download_link["href"]
+
+        return None
+    except Exception as e:
+        logging.error(f"Error extracting URL: {e}")
+        return None
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    logging.info("Bot is running...")
+    application.run_polling()
