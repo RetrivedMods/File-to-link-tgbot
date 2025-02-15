@@ -1,2 +1,5 @@
 python-telegram-bot==20.0  # Telegram Bot API library
 python-dotenv==1.0.0      # To load environment variables
+git add requirements.txt
+git commit -m "Add requirements.txt for Heroku deployment"
+git push origin main
