@@ -1,2 +1,3 @@
-python-telegram-bot==20.0  # Telegram Bot API library
-python-dotenv==1.0.0      # To load environment variables
+python-telegram-bot
+requests
+beautifulsoup4
