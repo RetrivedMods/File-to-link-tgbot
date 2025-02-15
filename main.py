@@ -1,6 +1,7 @@
 import logging
 import os
-from telegram import Update, ParseMode, Sticker
+from telegram import Update, Sticker
+from telegram.constants import ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from dotenv import load_dotenv  # Importing dotenv
 import time
